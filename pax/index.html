@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Pax: Meet Soneji's thesis project, a statically typed systems language and handwritten compiler frontend with type inference, deferred resolution, and C-targeting code generation.">
+<title>Pax — Building a systems language from scratch | Meet Soneji</title>
+<style>
+:root{color-scheme:dark;--bg:#141414;--text:#e8e8e8;--muted:#b5b5b5;--link:#b8d7ff;--line:#333}*{box-sizing:border-box}html{scroll-padding-top:24px}body{margin:0;background:var(--bg);color:var(--text);font:17px/1.85 system-ui,sans-serif}main{max-width:850px;margin:auto;padding:36px 24px 80px}a{color:var(--link);text-underline-offset:4px}a:hover{color:white}a:focus-visible{outline:2px solid var(--link);outline-offset:5px}h1{font-size:clamp(2.5rem,8vw,4.5rem);line-height:1.07;letter-spacing:-.045em;margin:24px 0}h2{font-size:1.7rem;line-height:1.3;margin-top:0}h3{font-size:1.1rem;margin-top:30px}p,li{color:var(--muted)}.eyebrow,.meta{font-size:.9rem;color:#aaa}.lead{font-size:1.2rem}.actions{display:flex;gap:20px;flex-wrap:wrap}.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:32px 0}.fact{border:1px solid var(--line);border-radius:8px;padding:16px}.fact dt{font-size:.85rem;color:#aaa}.fact dd{margin:4px 0 0;font-size:1.1rem}nav{border-block:1px solid var(--line);padding:20px 0;margin:32px 0}nav ol{padding-left:24px}section{padding-top:36px;margin-top:36px;border-top:1px solid var(--line)}pre{background:#1c1c1c;border:1px solid var(--line);padding:20px;border-radius:8px;overflow-x:auto;line-height:1.6;font-size:.9rem}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}p code,li code{color:#ddd;background:#222;padding:2px 4px;border-radius:3px}.note{border-left:3px solid #657e9b;padding-left:18px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:.95rem}th,td{text-align:left;border-bottom:1px solid var(--line);padding:12px;vertical-align:top}td{color:var(--muted)}caption{text-align:left;color:#aaa;margin-bottom:12px}footer{margin-top:56px;border-top:1px solid var(--line);padding-top:24px;font-size:.9rem}@media(max-width:500px){main{padding-inline:18px}pre{padding:14px}}
+</style>
+</head>
+<body><main>
+<a href="/">← Meet Soneji</a>
+<article>
+<header>
+<p class="eyebrow">THESIS PROJECT · LANGUAGE DESIGN · COMPILER ENGINEERING</p>
+<h1>Pax: building a systems language from scratch</h1>
+<p class="lead">A statically typed language that keeps pointers, explicit memory management, and low-level control—while moving declaration bookkeeping, type inference, and source translation into a handwritten compiler frontend.</p>
+<p class="meta">Meet Soneji · Based on the 2026 thesis <cite>Transpiler for Pax language</cite> · Supervisor: dr hab. inż. Ilona Bluemke</p>
+<p class="actions"><a href="https://github.com/sonejiMeet/pax">Source code on GitHub</a><a href="#architecture">Explore the architecture</a><a href="#demonstrations">See what it runs</a></p>
+<dl class="facts"><div class="fact"><dt>Implementation</dt><dd>Handwritten C++ frontend</dd></div><div class="fact"><dt>Compilation target</dt><dd>One generated source file</dd></div><div class="fact"><dt>Validation</dt><dd>~50 test programs</dd></div><div class="fact"><dt>Pax test source</dt><dd>2,500+ lines</dd></div></dl>
+<p class="note">This page showcases the implementation documented in the thesis. Measurements are reported thesis results, not independently repeated benchmarks. Code examples are adapted for readability; simplified lowering examples illustrate the design rather than exact generated output.</p>
+</header>
+<nav aria-label="Article contents"><h2>Inside the project</h2><ol><li><a href="#motivation">The problem Pax addresses</a></li><li><a href="#language">The language: less ceremony, explicit control</a></li><li><a href="#data">Strings, arrays, and cleanup</a></li><li><a href="#architecture">The frontend pipeline</a></li><li><a href="#resolution">Making declaration order irrelevant</a></li><li><a href="#generation">Turning checked programs into executable code</a></li><li><a href="#memory">Memory allocation and profiling</a></li><li><a href="#diagnostics">Diagnostics and debugging</a></li><li><a href="#demonstrations">Programs written in Pax</a></li><li><a href="#limits">Results, limitations, and next steps</a></li></ol></nav>
+<section id="motivation"><h2>1. The problem Pax addresses</h2>
+<p>Systems programming requires understanding memory, representation, and execution. It does not inherently require maintaining a second copy of a function signature in a header, arranging definitions around a compiler's reading order, or repeatedly passing an array's length separately from its address. Pax begins by distinguishing low-level control from low-level ceremony.</p>
+<p>The goal is not to conceal what the machine does. Pointers, manual allocation, structs, functions, loops, and explicit casts remain available. Instead, the language moves repetitive organisation into the frontend: resolving references to later declarations, attaching types to expressions, preserving collection metadata, and ordering generated definitions.</p>
+<p>This makes Pax more than an alternative spelling for C. The compiler must understand the program before it can supply those conveniences. Its design combines a compact surface language with a substantial semantic implementation.</p>
+</section>
+<section id="language"><h2>2. The language: less ceremony, explicit control</h2>
+<h3>Name-first declarations and static inference</h3>
+<pre><code>count: s64 = 42;       // Explicit type and initializer.
+ratio := 3.5;          // Infer the type at compile time.
+name := "Pax";
+enabled := true;</code></pre>
+<p>The declaration shape is consistent: name, optional type, initializer. Omitting the annotation does not introduce dynamic typing. The frontend determines a concrete type and stores it in the expression's AST node. The thesis specifies s64 as the default integer-literal type, float/float32 for floating literals, string for string literals, and bool for boolean literals.</p>
+<p>Explicit types still express constraints. A value of 100 fits into an s8 declaration; 1000 does not. Inference removes repeated information, while checking ensures that requested representations remain meaningful.</p>
+<h3>Functions, named arguments, and multiple results</h3>
+<pre><code>divide :: (a: int, b: int) -&gt; int, int {
+    return a / b, a % b;
+}
+
+quotient, remainder := divide(20, 3);
+_, remainder_only := divide(20, 3);</code></pre>
+<p>Functions begin with their names and use the double-colon marker. Return types follow the parameter list. Multiple results can be destructured, and the underscore discards an unwanted result. Default parameters and named arguments are resolved by the frontend and eventually become ordinary positional calls in the output.</p>
+<h3>Pointer types that read as types</h3>
+<pre><code>pointer: ^int;
+a, b, c: ^int;       // All three are pointers.
+values: [4]int;      // Four integers.
+pointers: [4]^int;   // Four integer pointers.</code></pre>
+<p>The prefix caret belongs to the type. This avoids the ambiguity of C's <code>int* a, b, c;</code>, where only a is a pointer. Array size and pointer composition stay next to the element type rather than being distributed around each declared name.</p>
+<h3>One member-access operator</h3>
+<pre><code>Stats :: struct {
+    score: int;
+}
+
+Player :: struct {
+    stats: ^Stats;
+}
+
+// Once player.stats points to a valid Stats object:
+// player.stats.score = 100;</code></pre>
+<p>Pax uses the dot operator for both struct values and pointers. To resolve a nested access, the analyser determines each intermediate type, follows pointer layers when required, and locates the next field. The converter later emits explicit dereferencing. The notation is simpler, but pointer validity remains the programmer's responsibility.</p>
+</section>
+<section id="data"><h2>3. Strings, arrays, and cleanup</h2>
+<h3>A string carries its byte count</h3>
+<pre><code>string :: struct {
+    count: s64;
+    data: ^u8;
+}</code></pre>
+<p>The representation keeps a byte count beside the data pointer. Code does not need to scan for a terminator merely to discover the stored length. String literals produce descriptors referring to read-only/static data; a local descriptor does not imply that the literal's bytes live on the stack.</p>
+<p>The String.pax module implements allocation, concatenation, slicing, comparison, cloning, and destruction in Pax. New_String creates an owned copy; concat and slice produce fresh buffers rather than borrowing a subsection of another allocation. The caller releases owned results with destroy_str. The get helper performs a bounds check and returns zero for an out-of-range index.</p>
+<p>A length-aware descriptor is not an ownership type system. The distinction between a descriptor, its referenced allocation, and that allocation's lifetime remains important. The thesis does not establish automatic prevention of all aliasing or lifetime mistakes.</p>
+<h3>Arrays preserve metadata</h3>
+<p>Pax arrays expose data and count fields and do not implicitly decay into bare pointers. A pointer to the array representation retains access to its length. This lets an array-oriented interface receive the collection without a second, independently maintained size parameter.</p>
+<pre><code>values: [4]int;
+values[0] = 834;
+array_pointer: ^[]int = &amp;values;
+
+for value: values {
+    // Work with each element.
+}
+
+for i: 0..4 {
+    // Inclusive endpoints: 0, 1, 2, 3, 4.
+}</code></pre>
+<p>Preserving a count makes validation and traversal easier; it is not by itself proof that every indexing operation or raw pointer use is safe. Pax retains explicit low-level operations.</p>
+<h3>Defer keeps cleanup near acquisition</h3>
+<pre><code>pointer := malloc(sizeof(int) * 10);
+defer {
+    free(pointer);
+}
+
+// Work with the allocation.</code></pre>
+<p>A deferred statement or block is scheduled for scope exit. Multiple deferred actions run in last-in, first-out order. The intended semantics cover ordinary early exits such as returns, so the generator must preserve cleanup along the relevant control-flow paths—not merely append text to the end of a block. This is explicit scope-based cleanup, not garbage collection or a guarantee of recovery after every runtime crash.</p>
+</section>
+<section id="architecture"><h2>4. The frontend pipeline</h2>
+<pre><code>.pax sources and imported modules
+                ↓
+        Lexer and parser
+                ↓
+      Abstract syntax tree
+                ↓
+       Symbol resolution
+                ↓
+  Type inference and checking
+                ↓
+      Resolved, typed AST
+                ↓
+         C converter
+                ↓
+  One generated translation unit
+                ↓
+        Backend compiler</code></pre>
+<p>The implementation is written in a restrained subset of C++, using templates, constructors, member functions, and shallow inheritance while remaining close to a C-style model. Lexing, parsing, analysis, and generation are handwritten without a parser generator or compiler framework. This gives the project direct control over language rules, internal representations, and diagnostics.</p>
+<h3>Lexing with source identity</h3>
+<p>Tokens carry kinds, row and column positions, and payloads such as integers, floating-point values, names, or counted strings. A union avoids reserving separate simultaneous payload storage for every literal category. Source positions are recorded immediately because every later stage may need them.</p>
+<p>Even simple syntax introduces implementation details. The lexer must distinguish a decimal point from the range operator: <code>1..4</code> must remain an integer, a two-dot token, and another integer—not a malformed float.</p>
+<h3>Recursive descent plus Pratt expressions</h3>
+<p>Statements and declarations use recursive descent. Expression parsing originally used separate functions for precedence levels, then moved to a Pratt/top-down operator-precedence approach. The current design centralises precedence in a table while keeping a compact recursive expression routine.</p>
+<pre><code>// Simplified left-associative expression algorithm.
+parseExpression(min_precedence):
+    left = parsePrimaryOrUnary()
+    while precedence(current) &gt;= min_precedence:
+        op = consume()
+        right = parseExpression(precedence(op) + 1)
+        left = Binary(left, op, right)
+    return left</code></pre>
+<p>The threshold determines how tightly the right-hand expression can bind. Member access and indexing bind more tightly than arithmetic; multiplication binds more tightly than addition. Irregular statement forms remain dedicated recursive-descent routines rather than being forced into an expression-oriented technique.</p>
+<h3>One AST, progressively enriched</h3>
+<p>The AST is the frontend's shared program representation. A common node base holds a kind and source filename, line, and column. Expression nodes also carry an inferred-type field. Blocks contain statements and parent-scope links. Declarations represent variables, parameters, fields, and functions; other nodes describe calls, operators, types, structs, imports, loops, and deferred code.</p>
+<p>Parsing creates structure. Resolution connects uses to declarations. Type analysis annotates expressions and validates operations. Generation consumes the resulting checked tree. Instead of rebuilding a different representation after every phase, Pax progressively adds meaning to a persistent, mutable AST.</p>
+</section>
+<section id="resolution"><h2>5. Making declaration order irrelevant</h2>
+<pre><code>main :: () {
+    result := double(21);
+}
+
+double :: (value: int) -&gt; int {
+    return value * 2;
+}</code></pre>
+<p>The function can appear after its use. When the first resolution traversal cannot find a declaration, it records the unresolved node and continues. Later work retries references after more declarations are known. Only after resolution fails should a genuinely missing definition become an error.</p>
+<h3>Why the saved scope matters</h3>
+<p>An unresolved name cannot be retried from an arbitrary active scope. Pax records its original lexical context. The traversal's scope stack is temporary, but AST blocks and parent links remain alive in the pool until compilation ends. Deferred lookup can therefore search as though it were still at the original reference.</p>
+<p>This connects a visible language feature to several implementation choices: persistent blocks, scope chains, unresolved-reference queues, and shared compilation lifetime. Order independence is a semantic architecture decision, not a printing trick.</p>
+<h3>Member lookup sometimes needs inference early</h3>
+<p>For <code>config := make_config();</code> followed by <code>config.database.host</code>, the resolver needs the return type of make_config before locating database. The thesis describes limited inference during member resolution for this purpose, followed by the broader type-analysis pass. Practical stages have explicit dependencies rather than perfectly sealed boundaries.</p>
+<h3>Structs become a dependency graph</h3>
+<p>A struct containing another struct by value requires that contained type's layout to be available. Pointer relationships are different: a linked node can point to another node without embedding it. Pax sorts definitions into dependency order for output and rejects impossible by-value cycles. The programmer can reorder valid definitions freely; the compiler cannot make an infinitely recursive embedded layout valid.</p>
+</section>
+<section id="generation"><h2>6. Turning checked programs into executable code</h2>
+<p>The project targets C so an existing compiler can handle optimisation and machine-specific generation. Pax keeps responsibility for the source language: invalid names, types, arguments, or members should be diagnosed before output. Backend rejection of supposedly valid emitted code is an implementation bug, not the intended user interface.</p>
+<p>The converter emits boilerplate and primitive aliases, optional debug helpers, declarations, dependency-ordered structs, globals, initialisation helpers, function bodies, and startup work. Imported Pax modules are processed into the whole-program representation, so ordinary source-level header management is unnecessary.</p>
+<h3>Lowering makes implicit work explicit</h3>
+<div class="table-wrap"><table><thead><tr><th>Source feature</th><th>Generated responsibility</th></tr></thead><tbody><tr><td>Pointer member access</td><td>Explicit dereference operations</td></tr><tr><td>String literal</td><td>Descriptor containing count and data</td></tr><tr><td>Static array</td><td>Backing storage plus array metadata</td></tr><tr><td>Default struct fields</td><td>Generated initialisation helpers, including nested defaults</td></tr><tr><td>Multiple return values</td><td>Generated result aggregate and field extraction</td></tr><tr><td>Named/default arguments</td><td>Resolved positional calls</td></tr><tr><td>Deferred cleanup</td><td>Cleanup along relevant scope-exit paths</td></tr></tbody></table></div>
+<p>For multiple results, the backend can return a generated struct with one field per value. A call stores that result and extracts the requested fields. For arrays, the output creates backing storage and initialises data/count metadata; global arrays require startup helpers.</p>
+<h3>The exact target dialect matters</h3>
+<p>The thesis calls the target C, but some listed output uses C++-style aggregate expressions such as <code>string{...}</code>, as well as <code>nullptr</code>. Reproducing the toolchain therefore requires the actual compiler language mode and standard, not just the label “C”. This qualification does not change the architecture: a fully analysed source program is lowered into a backend compilation language.</p>
+<p>Single-unit output simplifies project organisation and avoids duplicating generated definitions across translation units. It should not be advertised as universally faster without clean-build and incremental-build measurements on representative projects. Foreign libraries and the backend compiler still have their own linking and platform requirements.</p>
+</section>
+<section id="memory"><h2>7. Memory allocation and profiling</h2>
+<p>Compiler objects have a useful common lifetime: most AST nodes, type information, and deferred references survive until compilation finishes, then become unnecessary together. Pax exploits this with a custom pool allocator rather than individually allocating and freeing every small object.</p>
+<h3>Bump allocation in 128 KiB blocks</h3>
+<p>The active block tracks the next address and remaining capacity. A request is rounded to eight-byte alignment, served from the current position, and advances the cursor. When space runs out, a new block is acquired. All backing blocks are remembered and freed together at the end. The default block size is 128 KiB.</p>
+<p>The custom Array&lt;T&gt; uses the same pool. When it grows, it obtains a larger contiguous buffer and copies the existing elements. Superseded buffers remain allocated until bulk release. This trades temporary retained storage for simple lifetime management. Dense blocks can improve locality, although tree traversal does not guarantee adjacent access just because nodes were allocated close together.</p>
+<div class="table-wrap"><table><caption>Reported thesis benchmark: allocating and releasing 10 million AST nodes.</caption><thead><tr><th>Operation</th><th>Pool</th><th>Malloc-based comparison</th></tr></thead><tbody><tr><td>Allocation</td><td>0.424 s</td><td>1.930 s</td></tr><tr><td>Release</td><td>0.080 s</td><td>1.236 s</td></tr><tr><td>Total</td><td>0.504 s</td><td>3.166 s</td></tr></tbody></table></div>
+<p>The thesis reports approximately 4.6× faster allocation, 15.5× faster release, and 6.3× faster overall for this workload. These are allocator microbenchmark results, not an equivalent whole-compiler speedup or a universal comparison across machines.</p>
+<h3>Inspecting allocations with Perfetto</h3>
+<p>The -profile mode records allocation sequence, block, offset, size, padding, type, compiler phase, pointer, and source context. A Python conversion script turns the pipe-separated trace into Perfetto-compatible JSON. The timeline connects individual allocation patterns to expressions, node types, and phases, making block usage and alignment overhead observable.</p>
+</section>
+<section id="diagnostics"><h2>8. Diagnostics and debugging</h2>
+<p>Source locations are preserved from tokens through AST nodes. Lexing errors cover malformed tokens; parsing errors cover grammar; resolution errors cover unknown or duplicate names and invalid member access; type errors cover incompatible expressions, arguments, assignments, and returns.</p>
+<p>The parser attempts synchronisation after a syntax error rather than blindly interpreting every subsequent token in a damaged context. Parser, resolver, and type-checker diagnostics are buffered. The default display reports the first error in source order, while -verbose prints the collected diagnostics sorted by location for that phase.</p>
+<p>With -debug, generated #line directives associate output statements with Pax source locations. Backend debug information can then refer to the original files rather than only to generated output. A Windows-specific crash handler walks the stack for ordinary crashes; stack overflow receives a limited dedicated message because elaborate reporting itself needs stack space.</p>
+<p>The crash example in the thesis deliberately dereferences null. That is useful evidence of debug mapping, and also an explicit reminder that static typing and automatic dereferencing do not make Pax a fully memory-safe language.</p>
+</section>
+<section id="demonstrations"><h2>9. Programs written in Pax</h2>
+<p>The thesis validates integration through approximately fifty positive and negative test programs, spanning more than 2,500 lines of Pax source. The abstract and later chapters vary slightly in their test-count wording; these figures describe the reported scale rather than an independently audited exact count.</p>
+<h3>Animated ASCII ray marcher</h3>
+<p>An 80×40 terminal renderer animates a lit sphere at a stated target of 20 frames per second. It combines floating-point maths, foreign functions, structs, casts, arrays, globals, pointers, and nested control flow. Frames are assembled in a buffer and printed as complete terminal output. Timing uses __rdtsc and a configured cycle budget: a demonstration of low-level access, not a portable timing library or comparative runtime benchmark.</p>
+<h3>Pluggable terminal effects</h3>
+<p>Plasma and animated-ring effects share a rendering structure while replacing the mathematical function that produces brightness. The example demonstrates reusable ordinary functions and data, not a special shader subsystem built into the compiler.</p>
+<h3>An arena allocator implemented in Pax</h3>
+<p>A separate allocator written in Pax uses linked backing blocks, aligned requests, and new blocks when capacity is exhausted. It handles oversized requests by obtaining sufficient backing storage. This is distinct from the transpiler's internal pool: one implements compiler storage, while the other is a compiled user program exercising pointers, allocation, casts, and cleanup.</p>
+<h3>Conway's Game of Life</h3>
+<p>A 50×25 world runs for 300 generations using two grids, pointer swapping, edge wrapping, and glider/blinker patterns. Unlike a stateless visual effect, it carries state forward, exercising persistent updates, indexing, and separation of current and next-generation buffers.</p>
+<h3>Library modules and rejection tests</h3>
+<p>General.pax supplies shared foreign declarations. String.pax builds string operations on the descriptor model. Sort.pax implements integer quicksort and mergesort; specialisation reflects the absence of polymorphism in the documented implementation. Negative tests deliberately contain errors that must be rejected by Pax before generation, checking the diagnostic contract as well as successful execution.</p>
+</section>
+<section id="limits"><h2>10. Results, limitations, and next steps</h2>
+<p>The project's concrete achievement is a working language frontend that combines design and implementation: syntax, semantic analysis, typed program representation, generation, diagnostics, allocator design, and integration tests. The examples show that the features cooperate in meaningful programs rather than only working in isolation.</p>
+<p>The documented implementation is not a formally verified compiler. A test suite does not establish correctness for all possible inputs. The crash handler is Windows-specific. Memory management remains explicit. Backend code and external interfaces impose constraints. Claims of universal runtime parity, complete memory safety, or faster builds at every scale would go beyond the evidence in the thesis.</p>
+<p>Future directions identified in the thesis include an intermediate representation and native LLVM IR or x64 backend, further use of type information for struct layout and packing, a Pax-native printing facility with automatic format selection, and a larger library implemented in Pax.</p>
+<h3>The central engineering idea</h3>
+<p>Pax does not remove the underlying work. It relocates work that can be performed consistently: infer types once instead of repeating them, sort dependencies instead of manually arranging definitions, carry lengths instead of keeping them in parallel arguments, and generate cleanup and debugging information from structured source.</p>
+<p>The language keeps the machine visible while making the programmer manage fewer conventions that a compiler can already understand.</p>
+</section>
+<section id="source-note"><h2>Source and project links</h2><p>This showcase is adapted from Meet Soneji's <cite>Transpiler for Pax language</cite>, Warsaw, 2026: language design in Chapters 2–3, frontend implementation and allocator measurements in Chapter 4, demonstrations and tests in Chapter 5, and limitations and future work in Chapter 6. Examples are explanatory adaptations, not a separate audited language specification. This page does not upload the thesis PDF or claim that the current repository exactly matches the thesis version.</p><p><a href="https://github.com/sonejiMeet/pax">Explore the Pax repository</a> · <a href="/blog/">Other writing</a> · <a href="/">Back to home</a></p></section>
+</article><footer>Meet Soneji · Pax thesis project</footer>
+</main></body></html>
