@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Draft essays and research notes on AI hallucinations, model compression, and human creativity.">
+<title>Blog &amp; research notes — Meet Soneji</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#141414;color:#e8e8e8;font:17px/1.8 system-ui,sans-serif}main{max-width:760px;margin:auto;padding:48px 24px 80px}h1{font-size:clamp(2rem,7vw,3rem);line-height:1.2;letter-spacing:-.04em}h2{font-size:1.65rem;line-height:1.35}h3{font-size:1.05rem}p,li{color:#bbb}a{color:#b8d7ff;text-underline-offset:4px}a:hover{color:white}a:focus-visible{outline:2px solid #b8d7ff;outline-offset:5px}article{border-top:1px solid #333;margin-top:48px;padding-top:24px;scroll-margin-top:24px}.meta{color:#999;font-size:.9rem}nav ul{padding-left:22px}footer{margin-top:56px;font-size:.9rem;color:#999}
+</style>
+</head>
+<body><main>
+<a href="/">← Home</a>
+<header><h1>Blog &amp; research notes</h1><p>Ideas about AI, software, and the things people value.</p><p class="meta">Draft collection · 11 November 2026. AI-assisted drafts developed from Meet Soneji's article ideas. These are literature-based essays and proposed investigations, not reports of original experiments.</p></header>
+<nav aria-label="Articles"><ul>
+<li><a href="#hallucinations">Why AI keeps talking when it should say “I don't know”</a></li>
+<li><a href="#compression">Can a trillion-parameter model fit into a billion?</a></li>
+<li><a href="#human-made">When everything can be generated, human-made becomes a feature</a></li>
+</ul></nav>
+<article id="hallucinations">
+<p class="meta">Draft essay · AI reliability</p>
+<h2>Why AI keeps talking when it should say “I don't know”</h2>
+<p>An assistant can fail twice: first by not knowing an answer, then by hiding that gap behind a fluent explanation. The second failure is especially frustrating because it turns uncertainty into something that looks useful.</p>
+<p>One explanation concerns what gets rewarded. OpenAI's <a href="https://openai.com/index/why-language-models-hallucinate/">research on hallucination</a> argues that common training and evaluation procedures favor guessing over admitting uncertainty. If a correct answer earns a point while both an incorrect answer and abstention earn nothing, even an uncertain guess can improve the expected score. This explains an incentive, not every individual error.</p>
+<p>The important distinction is between being wrong and refusing to reveal uncertainty. Missing information, ambiguous questions, and reasoning failures do not disappear merely because a system is allowed to abstain. But acknowledging those limits can prevent a knowledge gap from becoming a confident falsehood.</p>
+<p>It is tempting to explain long answers as a business strategy to sell tokens. That is a hypothesis, not a conclusion established by the research above. Answer length, hidden reasoning, billing, and factual accuracy are separate variables. A short answer can hallucinate; a long answer can carefully delimit what is known.</p>
+<h3>Research to do next</h3>
+<p>Compare the same model on answerable, unanswerable, and false-premise questions under three instructions: answer normally, answer briefly, and explicitly abstain when evidence is missing. Record correctness, unsupported claims, abstention, and output length separately. No results are claimed here.</p>
+<p>The useful target is not silence or brevity by itself. It is a system that makes the boundary of its knowledge visible.</p>
+</article>
+<article id="compression">
+<p class="meta">Draft research note · Model capacity</p>
+<h2>Can a trillion-parameter model fit into a billion?</h2>
+<p>The question sounds like compressing a large archive. But before asking whether a model can shrink a thousandfold, we need to specify what must survive: factual recall, performance on selected tasks, or behavior across all possible inputs.</p>
+<p>A useful research starting point is Allen-Zhu and Li's <a href="https://arxiv.org/abs/2404.05405">Knowledge Capacity Scaling Laws</a>. Using controlled factual datasets, they study how many knowledge bits models store and report roughly two bits per parameter under their experimental conditions. That result is informative precisely because it defines a measurable task. It should not be treated as a universal accounting rule for every frontier model's knowledge or reasoning.</p>
+<p>A smaller model matching a larger model on a narrow evaluation would therefore not, by itself, show that all the larger model's information had been preserved. It could show that the evaluation needs less capacity than the full range of the original model's behavior. Success depends on the definition of equivalence.</p>
+<p>There is also a boundary question: what counts as the model? If answers remain available in an external database, the whole system may retain access to information even when its weights do not. That is a different claim from storing the same information in a billion parameters.</p>
+<h3>Research to do next</h3>
+<p>Build a controlled set of synthetic facts with held-out question paraphrases. Compare recall across model sizes while keeping training exposure explicit. Separate failures to store facts from failures to retrieve them. Evaluate any external retrieval system separately rather than quietly counting it as weight compression.</p>
+<p>The strongest version of the question is not “Can we remove 99.9% of the parameters?” It is “Which information and behaviors must survive, and where are we allowing the remaining information to live?”</p>
+</article>
+<article id="human-made">
+<p class="meta">Draft essay · Creativity &amp; culture</p>
+<h2>When everything can be generated, human-made becomes a feature</h2>
+<p>A drawing can matter because of what it depicts. It can also matter because somebody chose to draw it. The second kind of value becomes more noticeable when producing a plausible image no longer tells us much about the process behind it.</p>
+<p>There is evidence that authorship labels change judgment. In <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10319694/">Humans versus AI: whether and why we prefer human-created compared to AI-created artwork</a>, researchers assigned human or AI labels to AI-generated paintings. Human-labelled works received more positive evaluations, even though the underlying origin was the same. This supports a role for perceived authorship; it does not prove that human-made work is always visually superior.</p>
+<p>A <a href="https://link.springer.com/article/10.1007/s00146-024-02020-z">separate study of 952 participants</a> found that presentation context mattered: differences emerged when human and AI works were presented together. Its authors interpret the pattern as human art being upvalued rather than AI art simply being devalued. The distinction makes sweeping predictions about consumer behavior less defensible.</p>
+<p>The optimistic hypothesis is that abundant generated media could make process, intention, and provenance more valuable. Hand-drawn animation, a recorded performance, or a game's development history might become part of what an audience seeks. These are extensions of the argument, not outcomes demonstrated by the painting studies.</p>
+<p>The counterargument is distribution. Human work can become more meaningful to its audience while becoming harder to discover. Greater appreciation does not automatically translate into attention or income.</p>
+<h3>Research to do next</h3>
+<p>Test the same work with no process information, a human-authorship label, and documented creation notes. Measure appreciation, trust, and willingness to pay separately. The question is whether audiences value the label, the story, or credible evidence of the process.</p>
+<p>The defensible claim is not that low-quality generated content is good. It is that abundance may change what people notice and choose to value.</p>
+</article>
+<footer>Drafts for revision. Source links support the specific findings discussed; proposed experiments have not been conducted. <a href="/">Back to home</a></footer>
+</main></body>
+</html>
